@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "411150063367",
+    "project_id": "nyxx-a2e29",
+    "storage_bucket": "nyxx-a2e29.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:411150063367:android:d00f2c651152d8526b57a2",
+        "android_client_info": {
+          "package_name": "com.ladybug.nyxx"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB-r1p9KQ626J8eH11O5_sINiC6Gx2JDys"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
