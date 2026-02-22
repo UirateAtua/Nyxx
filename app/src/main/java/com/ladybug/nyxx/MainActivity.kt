@@ -22,6 +22,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var database: DatabaseReference
     private val messageList = mutableListOf<Message>()
     private lateinit var adapter: MessageAdapter
+    private var logged = false
+    private var loginName = "Unknown_User"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -39,8 +41,11 @@ class MainActivity : AppCompatActivity() {
 
         buttonSend.setOnClickListener {
             val messageText = editTextMessage.text.toString().trim()
-            if (messageText.isNotEmpty()) {
-                sendMessage(messageText)
+            if (!logged && messageText.isNotEmpty()) {
+                logged = true
+                loginName = messageText
+            } else if (messageText.isNotEmpty()) {
+                sendMessage(messageText, loginName)
                 editTextMessage.text.clear()
             } else {
                 Toast.makeText(this, "Please enter a message", Toast.LENGTH_SHORT).show()
@@ -50,8 +55,8 @@ class MainActivity : AppCompatActivity() {
         listenForMessages()
     }
 
-    private fun sendMessage(text: String) {
-        val userName = "User_${System.currentTimeMillis() % 1000}"
+    private fun sendMessage(text: String, loginName: String) {
+        val userName = "${loginName}"
         val timestamp = System.currentTimeMillis()
 
         val message = Message(text, userName, timestamp)
