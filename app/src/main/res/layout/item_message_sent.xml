@@ -2,8 +2,8 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:gravity="end"
-    android:orientation="vertical"
+    android:gravity="end|center_vertical"
+    android:orientation="horizontal"
     android:padding="4dp">
 
     <TextView
@@ -14,5 +14,13 @@
         android:padding="12dp"
         android:textColor="@android:color/black"
         android:text="This is a sent message" />
+
+    <ImageView
+        android:id="@+id/sent_tick"
+        android:layout_width="16dp"
+        android:layout_height="16dp"
+        android:layout_marginStart="4dp"
+        android:src="@android:drawable/ic_menu_send"
+        android:contentDescription="Sent"/>
 
 </LinearLayout>
