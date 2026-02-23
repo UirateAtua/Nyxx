@@ -73,7 +73,7 @@ class ChatActivity : AppCompatActivity() {
     private fun startChatWith(recipient: String) {
         val chatRoomId = getChatRoomId(loginName!!, recipient)
         chatRoomDb = dbRoot.child("chat_rooms").child(chatRoomId)
-
+        chatRoomDb?.child("created")?.setValue(true)
         listenForMessages()
     }
 
@@ -99,6 +99,7 @@ class ChatActivity : AppCompatActivity() {
 
         childEventListener = object : ChildEventListener {
             override fun onChildAdded(snapshot: DataSnapshot, previousChildName: String?) {
+                if (snapshot.key == "created") return
                 val message = snapshot.getValue(Message::class.java)
                 if (message != null) {
                     messageList.add(message)
