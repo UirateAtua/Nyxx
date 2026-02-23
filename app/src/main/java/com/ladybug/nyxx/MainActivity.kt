@@ -14,16 +14,23 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.firebase.database.*
 import java.util.*
+import android.widget.Button
 
 data class Chat(val id: String = "", val lastMessage: String = "", val recipient: String = "")
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var recyclerView: RecyclerView
+    private lateinit var buttonLogout: Button
     private lateinit var fabNewChat: FloatingActionButton
     private lateinit var adapter: ChatAdapter
     private val chatList = mutableListOf<Chat>()
     private var loginName: String? = null
+
+    private lateinit var username: EditText
+    private lateinit var password: EditText
+    private lateinit var buttonLogin: Button
+    private lateinit var buttonSignUp: Button
     private lateinit var dbRoot: DatabaseReference
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -34,6 +41,8 @@ class MainActivity : AppCompatActivity() {
         fabNewChat = findViewById(R.id.fabNewChat)
 
         dbRoot = FirebaseDatabase.getInstance().reference
+
+
 
         adapter = ChatAdapter(chatList) { chat ->
             val intent = Intent(this, ChatActivity::class.java)
@@ -47,27 +56,47 @@ class MainActivity : AppCompatActivity() {
             showNewChatDialog()
         }
 
-        showLoginDialog()
+        val prefs = getSharedPreferences("chat_prefs", MODE_PRIVATE)
+        val savedName = prefs.getString("username", null)
+
+        if (savedName != null) {
+            loginName = savedName
+            setContentView(R.layout.activity_main)
+            Toast.makeText(this, "Welcome Back, $loginName", Toast.LENGTH_SHORT).show()
+            listenForChats()
+        } else {
+            setContentView(R.layout.login)
+            login()
+        }
     }
 
-    private fun showLoginDialog() {
-        val builder = AlertDialog.Builder(this)
-        builder.setTitle("Login")
-        val input = EditText(this)
-        input.hint = "Enter your name"
-        builder.setView(input)
-        builder.setPositiveButton("OK") { _, _ ->
-            loginName = input.text.toString().trim()
-            if (loginName!!.isNotEmpty()) {
-                Toast.makeText(this, "Welcome, $loginName", Toast.LENGTH_SHORT).show()
-                listenForChats()
-            } else {
-                Toast.makeText(this, "Name cannot be empty", Toast.LENGTH_SHORT).show()
-                showLoginDialog()
+    private fun login() {
+        username = findViewById(R.id.editTextText)
+        password = findViewById(R.id.editTextTextPassword)
+        buttonLogin = findViewById(R.id.button1)
+        buttonSignUp = findViewById(R.id.button4)
+
+        buttonLogin.setOnClickListener {
+
+            val name = username.text.toString().trim()
+            if (name.isEmpty()) {
+                username.error = "Name required"
+                return@setOnClickListener
             }
+
+            loginName = name
+            getSharedPreferences("chat_prefs", MODE_PRIVATE).edit().putString("username", loginName).apply()
+            Toast.makeText(this, "Welcome, $loginName", Toast.LENGTH_SHORT).show()
+            setContentView(R.layout.activity_main)
+            listenForChats()
         }
-        builder.setCancelable(false)
-        builder.show()
+    }
+
+    private fun logout() {
+        getSharedPreferences("chat_prefs", MODE_PRIVATE).edit().remove("username").apply()
+        loginName = null
+        setContentView(R.layout.login)
+        login()
     }
 
     private fun showNewChatDialog() {
@@ -92,6 +121,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun listenForChats() {
+        buttonLogout = findViewById(R.id.button)
+        buttonLogout.setOnClickListener {
+            logout()
+        }
         val chatRoomsRef = dbRoot.child("chat_rooms")
         chatRoomsRef.addChildEventListener(object : ChildEventListener {
             override fun onChildAdded(snapshot: DataSnapshot, previousChildName: String?) {
