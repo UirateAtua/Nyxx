@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:gravity="end|center_vertical"
+    android:orientation="horizontal"
     android:padding="4dp">
 
     <TextView
@@ -11,37 +11,16 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:background="@drawable/bg_message_sent"
-        android:paddingStart="12dp"
-        android:paddingTop="8dp"
-        android:paddingEnd="12dp"
-        android:paddingBottom="20dp"
+        android:padding="12dp"
         android:textColor="@android:color/black"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        android:maxWidth="300dp"
-        tools:text="This is a sent message that is long enough to wrap to the next line" />
-
-    <TextView
-        android:id="@+id/textViewTimestamp"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginEnd="4dp"
-        android:layout_marginBottom="4dp"
-        android:textColor="#808080"
-        android:textSize="10sp"
-        app:layout_constraintBottom_toBottomOf="@+id/textViewMessage"
-        app:layout_constraintEnd_toStartOf="@+id/sent_tick"
-        tools:text="10:00 AM" />
+        android:text="This is a sent message" />
 
     <ImageView
         android:id="@+id/sent_tick"
-        android:layout_width="12dp"
-        android:layout_height="12dp"
-        android:layout_marginEnd="8dp"
-        android:src="@drawable/ic_tick_sent"
-        app:layout_constraintBottom_toBottomOf="@+id/textViewTimestamp"
-        app:layout_constraintEnd_toEndOf="@+id/textViewMessage"
-        app:layout_constraintTop_toTopOf="@+id/textViewTimestamp"
-        android:contentDescription="Sent" />
+        android:layout_width="16dp"
+        android:layout_height="16dp"
+        android:layout_marginStart="4dp"
+        android:src="@android:drawable/ic_menu_send"
+        android:contentDescription="Sent"/>
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+</LinearLayout>
