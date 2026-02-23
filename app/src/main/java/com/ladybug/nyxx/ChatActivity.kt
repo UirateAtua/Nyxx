@@ -55,7 +55,7 @@ class ChatActivity : AppCompatActivity() {
         adapter = MessageAdapter(messageList, loginName)
         recyclerView.adapter = adapter
 
-        dbRoot = FirebaseDatabase.getInstance().reference
+        dbRoot = FirebaseDatabase.getInstance("https://nyxx-a2e29-default-rtdb.europe-west1.firebasedatabase.app").reference
 
         if (loginName != null && recipientName != null) {
             startChatWith(recipientName!!)

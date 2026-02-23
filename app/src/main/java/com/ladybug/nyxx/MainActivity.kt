@@ -33,7 +33,7 @@ class MainActivity : AppCompatActivity() {
         recyclerView = findViewById(R.id.recyclerViewChats)
         fabNewChat = findViewById(R.id.fabNewChat)
 
-        dbRoot = FirebaseDatabase.getInstance().reference
+        dbRoot = FirebaseDatabase.getInstance("https://nyxx-a2e29-default-rtdb.europe-west1.firebasedatabase.app").reference
 
         adapter = ChatAdapter(chatList) { chat ->
             val intent = Intent(this, ChatActivity::class.java)
