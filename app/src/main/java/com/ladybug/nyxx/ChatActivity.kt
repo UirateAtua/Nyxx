@@ -15,6 +15,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.firebase.database.*
+import java.text.SimpleDateFormat
 import java.util.*
 
 data class Message(val text: String = "", val user: String = "", val timestamp: Long = 0)
@@ -131,9 +132,7 @@ class MessageAdapter(private val messages: List<Message>, private var currentUse
     private val VIEW_TYPE_SENT = 1
     private val VIEW_TYPE_RECEIVED = 2
 
-    fun setCurrentUser(user: String?) {
-        currentUser = user
-    }
+    private val timeFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
 
     override fun getItemViewType(position: Int): Int {
         val message = messages[position]
@@ -150,19 +149,20 @@ class MessageAdapter(private val messages: List<Message>, private var currentUse
         } else {
             R.layout.item_message_received
         }
-        val view = LayoutInflater.from(parent.context)
-            .inflate(layoutId, parent, false)
+        val view = LayoutInflater.from(parent.context).inflate(layoutId, parent, false)
         return MessageViewHolder(view)
     }
 
     override fun onBindViewHolder(holder: MessageViewHolder, position: Int) {
         val msg = messages[position]
-        holder.textView.text = msg.text
+        holder.messageText.text = msg.text
+        holder.timestampText.text = timeFormat.format(Date(msg.timestamp))
     }
 
     override fun getItemCount(): Int = messages.size
 
     class MessageViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-        val textView: TextView = itemView.findViewById(R.id.textViewMessage)
+        val messageText: TextView = itemView.findViewById(R.id.textViewMessage)
+        val timestampText: TextView = itemView.findViewById(R.id.textViewTimestamp)
     }
 }

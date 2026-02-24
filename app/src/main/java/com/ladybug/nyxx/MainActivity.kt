@@ -1,29 +1,35 @@
 package com.ladybug.nyxx
 
 import android.content.Intent
+import android.graphics.Color
 import android.os.Bundle
 import android.util.Log
 import android.view.LayoutInflater
+import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.ActionBarDrawerToggle
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.Toolbar
+import androidx.core.view.GravityCompat
+import androidx.drawerlayout.widget.DrawerLayout
+import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.google.android.material.floatingactionbutton.FloatingActionButton
+import com.google.android.material.navigation.NavigationView
 import com.google.firebase.database.*
 import java.util.*
 import android.widget.Button
 
 data class Chat(val id: String = "", val lastMessage: String = "", val recipient: String = "")
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelectedListener {
 
+    private lateinit var drawerLayout: DrawerLayout
     private lateinit var recyclerView: RecyclerView
-    private lateinit var buttonLogout: Button
-    private lateinit var fabNewChat: FloatingActionButton
     private lateinit var adapter: ChatAdapter
     private val chatList = mutableListOf<Chat>()
     private var loginName: String? = null
@@ -33,11 +39,23 @@ class MainActivity : AppCompatActivity() {
     private lateinit var buttonLogin: Button
     private lateinit var buttonSignUp: Button
     private lateinit var dbRoot: DatabaseReference
+    
+    companion object {
+        private var isPersistenceEnabled = false
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        if (!isPersistenceEnabled) {
+            try {
+                FirebaseDatabase.getInstance("https://nyxx-a2e29-default-rtdb.europe-west1.firebasedatabase.app").setPersistenceEnabled(true)
+                isPersistenceEnabled = true
+            } catch (e: DatabaseException) {
+                // Persistence already enabled
+            }
+        }
 
-        FirebaseDatabase.getInstance().goOnline()
         dbRoot = FirebaseDatabase.getInstance("https://nyxx-a2e29-default-rtdb.europe-west1.firebasedatabase.app").reference
 
         val prefs = getSharedPreferences("chat_prefs", MODE_PRIVATE)
@@ -56,8 +74,27 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupChatListView() {
         setContentView(R.layout.activity_main)
+        
+        val toolbar: Toolbar = findViewById(R.id.toolbar)
+        setSupportActionBar(toolbar)
+
+        drawerLayout = findViewById(R.id.drawer_layout)
+        val navView: NavigationView = findViewById(R.id.nav_view)
+
+        val toggle = ActionBarDrawerToggle(
+            this, drawerLayout, toolbar, 0, 0
+        )
+        toggle.drawerArrowDrawable.color = Color.WHITE
+        drawerLayout.addDrawerListener(toggle)
+        toggle.syncState()
+        navView.setNavigationItemSelectedListener(this)
+
+        val headerView = navView.getHeaderView(0)
+        val profileNameTextView = headerView.findViewById<TextView>(R.id.textViewProfileName)
+        profileNameTextView.text = loginName
+
         recyclerView = findViewById(R.id.recyclerViewChats)
-        fabNewChat = findViewById(R.id.fabNewChat)
+        recyclerView.layoutManager = LinearLayoutManager(this)
         adapter = ChatAdapter(chatList) { chat ->
             val intent = Intent(this, ChatActivity::class.java)
             intent.putExtra("USER_NAME", loginName)
@@ -65,13 +102,17 @@ class MainActivity : AppCompatActivity() {
             startActivity(intent)
         }
         recyclerView.adapter = adapter
-        fabNewChat.setOnClickListener {
-            showNewChatDialog()
+    }
+
+    override fun onNavigationItemSelected(item: MenuItem): Boolean {
+        when (item.itemId) {
+            R.id.nav_new_chat -> showNewChatDialog()
+            R.id.nav_settings -> Toast.makeText(this, "Settings clicked", Toast.LENGTH_SHORT).show()
+            R.id.nav_about -> Toast.makeText(this, "About clicked", Toast.LENGTH_SHORT).show()
+            R.id.nav_logout -> logout()
         }
-        buttonLogout = findViewById(R.id.button)
-        buttonLogout.setOnClickListener {
-            logout()
-        }
+        drawerLayout.closeDrawer(GravityCompat.START)
+        return true
     }
 
     private fun login() {
@@ -118,7 +159,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         buttonSignUp.setOnClickListener {
-            Log.d("SignupDebug", "Sign Up button clicked.")
             val name = username.text.toString().trim()
             val pass = password.text.toString()
             if (name.isEmpty()) {
@@ -130,11 +170,9 @@ class MainActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
-            Log.d("SignupDebug", "Attempting to query Firebase for user: $name")
             val userRef = dbRoot.child("users").child(name)
             userRef.get().addOnCompleteListener { task ->
                 if (task.isSuccessful) {
-                    Log.d("SignupDebug", "Firebase query success!")
                     val snapshot = task.result
                     if (snapshot.exists()) {
                         Toast.makeText(this, "User already exists", Toast.LENGTH_SHORT).show()
@@ -158,7 +196,6 @@ class MainActivity : AppCompatActivity() {
                             }
                     }
                 } else {
-                    Log.e("SignupDebug", "Firebase query failed!", task.exception)
                     Toast.makeText(this, "Signup failed: ${task.exception?.message}", Toast.LENGTH_SHORT).show()
                 }
             }
@@ -218,19 +255,19 @@ class MainActivity : AppCompatActivity() {
 class ChatAdapter(private val chats: List<Chat>, private val onClick: (Chat) -> Unit) : RecyclerView.Adapter<ChatAdapter.ChatViewHolder>() {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ChatViewHolder {
-        val view = LayoutInflater.from(parent.context).inflate(android.R.layout.simple_list_item_1, parent, false)
+        val view = LayoutInflater.from(parent.context).inflate(R.layout.item_chat, parent, false)
         return ChatViewHolder(view)
     }
 
     override fun onBindViewHolder(holder: ChatViewHolder, position: Int) {
         val chat = chats[position]
-        holder.textView.text = chat.recipient
+        holder.recipientName.text = chat.recipient
         holder.itemView.setOnClickListener { onClick(chat) }
     }
 
     override fun getItemCount(): Int = chats.size
 
     class ChatViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-        val textView: TextView = itemView.findViewById(android.R.id.text1)
+        val recipientName: TextView = itemView.findViewById(R.id.textViewRecipientName)
     }
 }
