@@ -1,14 +1,11 @@
 package com.ladybug.nyxx
 
 import android.os.Bundle
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Button
-import android.widget.EditText
-import android.widget.LinearLayout
-import android.widget.TextView
-import android.widget.Toast
+import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -17,8 +14,13 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.firebase.database.*
 import java.text.SimpleDateFormat
 import java.util.*
-import android.util.Log
-data class Message(val text: String = "", val user: String = "", val timestamp: Long = 0, val isEncrypted: Boolean = false)
+
+data class Message(
+    val text: String = "",
+    val user: String = "",
+    val timestamp: Long = 0,
+    val isEncrypted: Boolean = false
+)
 
 class ChatActivity : AppCompatActivity() {
 
@@ -48,16 +50,16 @@ class ChatActivity : AppCompatActivity() {
 
         loginName = intent.getStringExtra("USER_NAME")
         recipientName = intent.getStringExtra("RECIPIENT_NAME")
-
         title = recipientName
 
         setupKeyboardHandling()
-
         recyclerView.layoutManager = LinearLayoutManager(this)
         adapter = MessageAdapter(messageList, loginName)
         recyclerView.adapter = adapter
 
-        dbRoot = FirebaseDatabase.getInstance("https://nyxx-a2e29-default-rtdb.europe-west1.firebasedatabase.app").reference
+        dbRoot = FirebaseDatabase.getInstance(
+            "https://nyxx-a2e29-default-rtdb.europe-west1.firebasedatabase.app"
+        ).reference
 
         if (loginName != null && recipientName != null) {
             startChatWith(recipientName!!)
@@ -84,12 +86,14 @@ class ChatActivity : AppCompatActivity() {
     }
 
     private fun sendMessage(text: String) {
+        Log.d("E2EE", "send before encrypted: $text")
         val encryptedText = CryptoUtils.encrypt(text, sharedSecret)
+        Log.d("E2EE", "send after encrypted: $encryptedText")
 
         val currentUser = loginName ?: return
         val timestamp = System.currentTimeMillis()
         val message = Message(encryptedText, currentUser, timestamp, isEncrypted = true)
-        Log.d("E2EE", "Encrypted: $encryptedText")
+
         chatRoomDb?.push()?.setValue(message)
             ?.addOnFailureListener { e ->
                 Toast.makeText(this, "Failed to send: ${e.message}", Toast.LENGTH_SHORT).show()
@@ -103,28 +107,33 @@ class ChatActivity : AppCompatActivity() {
 
         childEventListener = object : ChildEventListener {
             override fun onChildAdded(snapshot: DataSnapshot, previousChildName: String?) {
-
                 if (snapshot.key == "created") return
 
                 val message = snapshot.getValue(Message::class.java)
                 if (message != null) {
-                    Log.d("E2EE", "Received raw: ${message.text}")
-                    val finalText = if (message.isEncrypted) {
-                        try {
+                    val isEncryptedSnapshot = snapshot.child("isEncrypted").getValue(Boolean::class.java)
+                    Log.d("E2EE", "receive before decrypted: ${message.text}")
+                    val finalText = try {
+                        if (isEncryptedSnapshot == null) {
                             CryptoUtils.decrypt(message.text, sharedSecret)
-                        } catch (e: Exception) {
-                            "[Decryption Failed]"
+                        } else if (isEncryptedSnapshot) {
+                            CryptoUtils.decrypt(message.text, sharedSecret)
+                        } else {
+                            message.text
                         }
-                    } else {
+                    } catch (e: Exception) {
                         message.text
                     }
+                    Log.d("E2EE", "receive after decrypted: $finalText")
 
-                    val safeMessage = message.copy(text = finalText)
+
+                    val safeMessage = message.copy(text = finalText, isEncrypted = isEncryptedSnapshot ?: false)
                     messageList.add(safeMessage)
                     adapter.notifyItemInserted(messageList.size - 1)
                     recyclerView.scrollToPosition(messageList.size - 1)
                 }
             }
+
             override fun onChildChanged(snapshot: DataSnapshot, previousChildName: String?) {}
             override fun onChildRemoved(snapshot: DataSnapshot) {}
             override fun onChildMoved(snapshot: DataSnapshot, previousChildName: String?) {}
@@ -132,6 +141,7 @@ class ChatActivity : AppCompatActivity() {
                 Toast.makeText(this@ChatActivity, "Failed to listen for messages.", Toast.LENGTH_SHORT).show()
             }
         }
+
         chatRoomDb?.addChildEventListener(childEventListener!!)
     }
 
@@ -144,28 +154,20 @@ class ChatActivity : AppCompatActivity() {
     }
 }
 
-class MessageAdapter(private val messages: List<Message>, private var currentUser: String?) : RecyclerView.Adapter<MessageAdapter.MessageViewHolder>() {
+class MessageAdapter(private val messages: List<Message>, private var currentUser: String?) :
+    RecyclerView.Adapter<MessageAdapter.MessageViewHolder>() {
 
     private val VIEW_TYPE_SENT = 1
     private val VIEW_TYPE_RECEIVED = 2
-
     private val timeFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
 
     override fun getItemViewType(position: Int): Int {
         val message = messages[position]
-        return if (message.user == currentUser) {
-            VIEW_TYPE_SENT
-        } else {
-            VIEW_TYPE_RECEIVED
-        }
+        return if (message.user == currentUser) VIEW_TYPE_SENT else VIEW_TYPE_RECEIVED
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): MessageViewHolder {
-        val layoutId = if (viewType == VIEW_TYPE_SENT) {
-            R.layout.item_message_sent
-        } else {
-            R.layout.item_message_received
-        }
+        val layoutId = if (viewType == VIEW_TYPE_SENT) R.layout.item_message_sent else R.layout.item_message_received
         val view = LayoutInflater.from(parent.context).inflate(layoutId, parent, false)
         return MessageViewHolder(view)
     }

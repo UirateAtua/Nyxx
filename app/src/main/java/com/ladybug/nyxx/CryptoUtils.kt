@@ -18,9 +18,10 @@ object CryptoUtils {
         cipher.init(Cipher.ENCRYPT_MODE, key)
 
         val iv = cipher.iv
-        val encryptedBytes = cipher.doFinal(plainText.toByteArray())
+        val encryptedBytes = cipher.doFinal(
+            plainText.toByteArray(Charsets.UTF_8)   // 🔥 FIX HERE
+        )
 
-        // Combine IV + encrypted
         val combined = iv + encryptedBytes
 
         return Base64.encodeToString(combined, Base64.NO_WRAP)
@@ -31,15 +32,19 @@ object CryptoUtils {
 
         val combined = Base64.decode(cipherText, Base64.NO_WRAP)
 
+        if (combined.size < 17) {
+            throw IllegalArgumentException("Invalid encrypted data")
+        }
+
         val iv = combined.copyOfRange(0, 16)
         val encryptedBytes = combined.copyOfRange(16, combined.size)
 
-        val cipher = Cipher.getInstance(TRANSFORMATION)
+        val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
         cipher.init(Cipher.DECRYPT_MODE, key, IvParameterSpec(iv))
 
         val decryptedBytes = cipher.doFinal(encryptedBytes)
 
-        return String(decryptedBytes)
+        return String(decryptedBytes, Charsets.UTF_8)
     }
 
     private fun generate128BitKey(secret: String): SecretKey {
