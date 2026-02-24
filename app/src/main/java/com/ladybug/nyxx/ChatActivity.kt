@@ -17,7 +17,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.firebase.database.*
 import java.text.SimpleDateFormat
 import java.util.*
-
+import android.util.Log
 data class Message(val text: String = "", val user: String = "", val timestamp: Long = 0, val isEncrypted: Boolean = false)
 
 class ChatActivity : AppCompatActivity() {
@@ -89,7 +89,7 @@ class ChatActivity : AppCompatActivity() {
         val currentUser = loginName ?: return
         val timestamp = System.currentTimeMillis()
         val message = Message(encryptedText, currentUser, timestamp, isEncrypted = true)
-
+        Log.d("E2EE", "Encrypted: $encryptedText")
         chatRoomDb?.push()?.setValue(message)
             ?.addOnFailureListener { e ->
                 Toast.makeText(this, "Failed to send: ${e.message}", Toast.LENGTH_SHORT).show()
@@ -103,11 +103,12 @@ class ChatActivity : AppCompatActivity() {
 
         childEventListener = object : ChildEventListener {
             override fun onChildAdded(snapshot: DataSnapshot, previousChildName: String?) {
+
                 if (snapshot.key == "created") return
 
                 val message = snapshot.getValue(Message::class.java)
                 if (message != null) {
-
+                    Log.d("E2EE", "Received raw: ${message.text}")
                     val finalText = if (message.isEncrypted) {
                         try {
                             CryptoUtils.decrypt(message.text, sharedSecret)
