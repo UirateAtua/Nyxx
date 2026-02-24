@@ -18,10 +18,11 @@ import com.google.firebase.database.*
 import java.text.SimpleDateFormat
 import java.util.*
 
-data class Message(val text: String = "", val user: String = "", val timestamp: Long = 0)
+data class Message(val text: String = "", val user: String = "", val timestamp: Long = 0, val isEncrypted: Boolean = false)
 
 class ChatActivity : AppCompatActivity() {
 
+    private val sharedSecret = "super_secret_key"
     private lateinit var recyclerView: RecyclerView
     private lateinit var editTextMessage: EditText
     private lateinit var buttonSend: Button
@@ -83,9 +84,11 @@ class ChatActivity : AppCompatActivity() {
     }
 
     private fun sendMessage(text: String) {
+        val encryptedText = CryptoUtils.encrypt(text, sharedSecret)
+
         val currentUser = loginName ?: return
         val timestamp = System.currentTimeMillis()
-        val message = Message(text, currentUser, timestamp)
+        val message = Message(encryptedText, currentUser, timestamp, isEncrypted = true)
 
         chatRoomDb?.push()?.setValue(message)
             ?.addOnFailureListener { e ->
@@ -101,9 +104,22 @@ class ChatActivity : AppCompatActivity() {
         childEventListener = object : ChildEventListener {
             override fun onChildAdded(snapshot: DataSnapshot, previousChildName: String?) {
                 if (snapshot.key == "created") return
+
                 val message = snapshot.getValue(Message::class.java)
                 if (message != null) {
-                    messageList.add(message)
+
+                    val finalText = if (message.isEncrypted) {
+                        try {
+                            CryptoUtils.decrypt(message.text, sharedSecret)
+                        } catch (e: Exception) {
+                            "[Decryption Failed]"
+                        }
+                    } else {
+                        message.text
+                    }
+
+                    val safeMessage = message.copy(text = finalText)
+                    messageList.add(safeMessage)
                     adapter.notifyItemInserted(messageList.size - 1)
                     recyclerView.scrollToPosition(messageList.size - 1)
                 }
