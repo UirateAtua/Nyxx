@@ -19,6 +19,8 @@ data class Message(
     val text: String = "",
     val user: String = "",
     val timestamp: Long = 0,
+    val id: String = "",
+    var isSeen: Boolean = false,
     val isEncrypted: Boolean = false
 )
 
@@ -92,8 +94,13 @@ class ChatActivity : AppCompatActivity() {
 
         val currentUser = loginName ?: return
         val timestamp = System.currentTimeMillis()
-        val message = Message(encryptedText, currentUser, timestamp, isEncrypted = true)
+        val messageId = chatRoomDb?.push()?.key
 
+        if (messageId.isNullOrEmpty()) {
+            Toast.makeText(this, "Failed to create message ID.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val message = Message(encryptedText, currentUser, timestamp, messageId, false, isEncrypted = true)
         chatRoomDb?.push()?.setValue(message)
             ?.addOnFailureListener { e ->
                 Toast.makeText(this, "Failed to send: ${e.message}", Toast.LENGTH_SHORT).show()
@@ -111,7 +118,12 @@ class ChatActivity : AppCompatActivity() {
                 if (snapshot.key == "created") return
                 if (!snapshot.hasChild("text")) return
 
-                val message = snapshot.getValue(Message::class.java)
+                val message = try {
+                    snapshot.getValue(Message::class.java)
+                } catch (e: DatabaseException) {
+                    return
+                }
+
                 if (message != null) {
                     val isEncryptedSnapshot = snapshot.child("isEncrypted").getValue(Boolean::class.java)
                     Log.d("E2EE", "receive before decrypted: ${message.text}")
@@ -133,10 +145,31 @@ class ChatActivity : AppCompatActivity() {
                     messageList.add(safeMessage)
                     adapter.notifyItemInserted(messageList.size - 1)
                     recyclerView.scrollToPosition(messageList.size - 1)
+
+                    if (message.user != loginName && !message.isSeen) {
+                        if (message.id.isNotEmpty()) {
+                            chatRoomDb?.child(message.id)?.child("seen")?.setValue(true)
+                        }
+                    }
                 }
             }
 
-            override fun onChildChanged(snapshot: DataSnapshot, previousChildName: String?) {}
+            override fun onChildChanged(snapshot: DataSnapshot, previousChildName: String?) {
+                val message = try {
+                    snapshot.getValue(Message::class.java)
+                } catch (e: DatabaseException) {
+                    return
+                }
+
+                if (message != null) {
+                    val index = messageList.indexOfFirst { it.id == message.id }
+                    if (index != -1) {
+                        messageList[index] = message
+                        adapter.notifyItemChanged(index)
+                    }
+                }
+            }
+
             override fun onChildRemoved(snapshot: DataSnapshot) {}
             override fun onChildMoved(snapshot: DataSnapshot, previousChildName: String?) {}
             override fun onCancelled(error: DatabaseError) {
@@ -178,6 +211,14 @@ class MessageAdapter(private val messages: List<Message>, private var currentUse
         val msg = messages[position]
         holder.messageText.text = msg.text
         holder.timestampText.text = timeFormat.format(Date(msg.timestamp))
+
+        if (getItemViewType(position) == VIEW_TYPE_SENT) {
+            if (msg.isSeen) {
+                holder.sentTick?.setImageResource(R.drawable.ic_tick_seen)
+            } else {
+                holder.sentTick?.setImageResource(R.drawable.ic_tick_sent)
+            }
+        }
     }
 
     override fun getItemCount(): Int = messages.size
@@ -185,5 +226,6 @@ class MessageAdapter(private val messages: List<Message>, private var currentUse
     class MessageViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         val messageText: TextView = itemView.findViewById(R.id.textViewMessage)
         val timestampText: TextView = itemView.findViewById(R.id.textViewTimestamp)
+        val sentTick: ImageView? = itemView.findViewById(R.id.sent_tick) // Nullable for received messages
     }
 }
