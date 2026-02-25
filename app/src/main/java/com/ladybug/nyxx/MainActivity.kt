@@ -7,6 +7,7 @@ import android.view.LayoutInflater
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
@@ -20,11 +21,15 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.navigation.NavigationView
 import com.google.firebase.database.*
+import java.security.MessageDigest
 import java.util.*
-import android.widget.Button
 
-
-data class Chat(val id: String = "", val lastMessage: String = "", val recipient: String = "", var unreadCount: Int = 0)
+data class Chat(
+    val id: String = "",
+    val lastMessage: String = "",
+    val recipient: String = "",
+    var unreadCount: Int = 0
+)
 
 class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelectedListener {
 
@@ -39,24 +44,29 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
     private lateinit var buttonLogin: Button
     private lateinit var buttonSignUp: Button
     private lateinit var dbRoot: DatabaseReference
-    
+
+    // Store listeners to remove them later
+    private val chatListeners = mutableListOf<ValueEventListener>()
+    private var chatRoomListener: ChildEventListener? = null
+
     companion object {
+        private const val FIREBASE_URL = "https://nyxx-a2e29-default-rtdb.europe-west1.firebasedatabase.app"
         private var isPersistenceEnabled = false
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
+
         if (!isPersistenceEnabled) {
             try {
-                FirebaseDatabase.getInstance("https://nyxx-a2e29-default-rtdb.europe-west1.firebasedatabase.app").setPersistenceEnabled(true)
+                FirebaseDatabase.getInstance(FIREBASE_URL).setPersistenceEnabled(true)
                 isPersistenceEnabled = true
             } catch (e: DatabaseException) {
                 // Persistence already enabled
             }
         }
 
-        dbRoot = FirebaseDatabase.getInstance("https://nyxx-a2e29-default-rtdb.europe-west1.firebasedatabase.app").reference
+        dbRoot = FirebaseDatabase.getInstance(FIREBASE_URL).reference
 
         val prefs = getSharedPreferences("chat_prefs", MODE_PRIVATE)
         val savedName = prefs.getString("username", null)
@@ -68,13 +78,21 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             listenForChats()
         } else {
             setContentView(R.layout.login)
-            login()
+            initLoginViews()
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        // Clean up listeners to prevent memory leaks
+        chatRoomListener?.let { dbRoot.child("chat_rooms").removeEventListener(it) }
+        chatListeners.forEach { dbRoot.removeEventListener(it) }
+        chatListeners.clear()
     }
 
     private fun setupChatListView() {
         setContentView(R.layout.activity_main)
-        
+
         val toolbar: Toolbar = findViewById(R.id.toolbar)
         setSupportActionBar(toolbar)
 
@@ -115,98 +133,109 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         return true
     }
 
-    private fun login() {
+    private fun initLoginViews() {
         username = findViewById(R.id.editTextText)
         password = findViewById(R.id.editTextTextPassword)
         buttonLogin = findViewById(R.id.button1)
         buttonSignUp = findViewById(R.id.button4)
 
-        buttonLogin.setOnClickListener {
-            val name = username.text.toString().trim()
-            val pass = password.text.toString()
-            if (name.isEmpty()) {
-                username.error = "Name required"
-                return@setOnClickListener
-            }
-            if (pass.isEmpty()) {
-                password.error = "Password required"
-                return@setOnClickListener
-            }
+        buttonLogin.setOnClickListener { handleLogin() }
+        buttonSignUp.setOnClickListener { handleSignUp() }
+    }
 
-            val userRef = dbRoot.child("users").child(name)
-            userRef.get().addOnSuccessListener { snapshot ->
-                if (!snapshot.exists()) {
-                    Toast.makeText(this, "You have to sign up first!", Toast.LENGTH_SHORT).show()
-                    return@addOnSuccessListener
-                }
+    private fun hashPassword(password: String): String {
+        val bytes = MessageDigest.getInstance("SHA-256").digest(password.toByteArray())
+        return bytes.joinToString("") { "%02x".format(it) }
+    }
 
-                val savedPassword = snapshot.child("password").value.toString()
-                if (savedPassword == pass) {
-                    Toast.makeText(this, "Login successful!", Toast.LENGTH_SHORT).show()
-                    loginName = name
-                    val prefs = getSharedPreferences("chat_prefs", MODE_PRIVATE).edit()
-                    prefs.putString("username", loginName)
-                    prefs.apply()
-                    setupChatListView()
-                    listenForChats()
-                } else {
-                    Toast.makeText(this, "Wrong password!!!", Toast.LENGTH_SHORT).show()
-                }
+    private fun handleLogin() {
+        val name = username.text.toString().trim()
+        val pass = password.text.toString()
 
-            }.addOnFailureListener {
-                Toast.makeText(this, "Login failed", Toast.LENGTH_SHORT).show()
-            }
+        if (name.isEmpty()) {
+            username.error = "Name required"
+            return
+        }
+        if (pass.isEmpty()) {
+            password.error = "Password required"
+            return
         }
 
-        buttonSignUp.setOnClickListener {
-            val name = username.text.toString().trim()
-            val pass = password.text.toString()
-            if (name.isEmpty()) {
-                username.error = "Name required"
-                return@setOnClickListener
-            }
-            if (pass.isEmpty()) {
-                password.error = "Password required"
-                return@setOnClickListener
+        val userRef = dbRoot.child("users").child(name)
+        userRef.get().addOnSuccessListener { snapshot ->
+            if (!snapshot.exists()) {
+                Toast.makeText(this, "You have to sign up first!", Toast.LENGTH_SHORT).show()
+                return@addOnSuccessListener
             }
 
-            val userRef = dbRoot.child("users").child(name)
-            userRef.get().addOnCompleteListener { task ->
-                if (task.isSuccessful) {
-                    val snapshot = task.result
-                    if (snapshot.exists()) {
-                        Toast.makeText(this, "User already exists", Toast.LENGTH_SHORT).show()
-                    } else {
-                        val userData = mapOf(
-                            "password" to pass,
-                            "createdAt" to System.currentTimeMillis()
-                        )
-                        userRef.setValue(userData)
-                            .addOnSuccessListener {
-                                Toast.makeText(this, "User created! Signing in...", Toast.LENGTH_SHORT).show()
-                                loginName = name
-                                val prefs = getSharedPreferences("chat_prefs", MODE_PRIVATE).edit()
-                                prefs.putString("username", loginName)
-                                prefs.apply()
-                                setupChatListView()
-                                listenForChats()
-                            }
-                            .addOnFailureListener { e ->
-                                Toast.makeText(this, "Error creating user: ${e.message}", Toast.LENGTH_SHORT).show()
-                            }
-                    }
+            val savedPasswordHash = snapshot.child("password").value.toString()
+            if (savedPasswordHash == hashPassword(pass)) {
+                Toast.makeText(this, "Login successful!", Toast.LENGTH_SHORT).show()
+                loginName = name
+                saveLoginSession(name)
+                setupChatListView()
+                listenForChats()
+            } else {
+                Toast.makeText(this, "Wrong password!!!", Toast.LENGTH_SHORT).show()
+            }
+        }.addOnFailureListener {
+            Toast.makeText(this, "Login failed", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun handleSignUp() {
+        val name = username.text.toString().trim()
+        val pass = password.text.toString()
+
+        if (name.isEmpty()) {
+            username.error = "Name required"
+            return
+        }
+        if (pass.isEmpty()) {
+            password.error = "Password required"
+            return
+        }
+
+        val userRef = dbRoot.child("users").child(name)
+        userRef.get().addOnCompleteListener { task ->
+            if (task.isSuccessful) {
+                val snapshot = task.result
+                if (snapshot.exists()) {
+                    Toast.makeText(this, "User already exists", Toast.LENGTH_SHORT).show()
                 } else {
-                    Toast.makeText(this, "Signup failed: ${task.exception?.message}", Toast.LENGTH_SHORT).show()
+                    val userData = mapOf(
+                        "password" to hashPassword(pass),
+                        "createdAt" to System.currentTimeMillis()
+                    )
+                    userRef.setValue(userData)
+                        .addOnSuccessListener {
+                            Toast.makeText(this, "User created! Signing in...", Toast.LENGTH_SHORT).show()
+                            loginName = name
+                            saveLoginSession(name)
+                            setupChatListView()
+                            listenForChats()
+                        }
+                        .addOnFailureListener { e ->
+                            Toast.makeText(this, "Error creating user: ${e.message}", Toast.LENGTH_SHORT).show()
+                        }
                 }
+            } else {
+                Toast.makeText(this, "Signup failed: ${task.exception?.message}", Toast.LENGTH_SHORT).show()
             }
         }
+    }
+
+    private fun saveLoginSession(name: String) {
+        val prefs = getSharedPreferences("chat_prefs", MODE_PRIVATE).edit()
+        prefs.putString("username", name)
+        prefs.apply()
     }
 
     private fun logout() {
         getSharedPreferences("chat_prefs", MODE_PRIVATE).edit().remove("username").apply()
         loginName = null
         setContentView(R.layout.login)
-        login()
+        initLoginViews()
     }
 
     private fun showNewChatDialog() {
@@ -234,7 +263,8 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         chatList.clear()
         adapter.notifyDataSetChanged()
         val chatRoomsRef = dbRoot.child("chat_rooms")
-        chatRoomsRef.addChildEventListener(object : ChildEventListener {
+
+        chatRoomListener = object : ChildEventListener {
             override fun onChildAdded(snapshot: DataSnapshot, previousChildName: String?) {
                 val chatRoomId = snapshot.key ?: return
                 val currentUser = loginName?.lowercase(Locale.ROOT) ?: return
@@ -246,7 +276,7 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
 
                 val chat = Chat(
                     id = chatRoomId,
-                    lastMessage = "",
+                    lastMessage = " ",
                     recipient = recipient.replaceFirstChar {
                         if (it.isLowerCase()) it.titlecase(Locale.ROOT) else it.toString()
                     },
@@ -256,16 +286,14 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
                 chatList.add(chat)
                 adapter.notifyItemInserted(chatList.size - 1)
 
-                dbRoot.child("chat_rooms")
+                // Listen for unread count changes
+                val unreadListener = dbRoot.child("chat_rooms")
                     .child(chatRoomId)
                     .child("unreadCount")
                     .child(currentUser)
                     .addValueEventListener(object : ValueEventListener {
-
                         override fun onDataChange(unreadSnapshot: DataSnapshot) {
-
                             val count = unreadSnapshot.getValue(Int::class.java) ?: 0
-
                             val index = chatList.indexOfFirst { it.id == chatRoomId }
                             if (index != -1) {
                                 chatList[index].unreadCount = count
@@ -275,16 +303,21 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
 
                         override fun onCancelled(error: DatabaseError) {}
                     })
+                chatListeners.add(unreadListener)
             }
+
             override fun onChildChanged(snapshot: DataSnapshot, previousChildName: String?) {}
             override fun onChildRemoved(snapshot: DataSnapshot) {}
             override fun onChildMoved(snapshot: DataSnapshot, previousChildName: String?) {}
             override fun onCancelled(error: DatabaseError) {}
-        })
+        }
+
+        chatRoomsRef.addChildEventListener(chatRoomListener!!)
     }
 }
 
-class ChatAdapter(private val chats: List<Chat>, private val onClick: (Chat) -> Unit) : RecyclerView.Adapter<ChatAdapter.ChatViewHolder>() {
+class ChatAdapter(private val chats: List<Chat>, private val onClick: (Chat) -> Unit) :
+    RecyclerView.Adapter<ChatAdapter.ChatViewHolder>() {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ChatViewHolder {
         val view = LayoutInflater.from(parent.context).inflate(R.layout.item_chat, parent, false)
@@ -310,6 +343,5 @@ class ChatAdapter(private val chats: List<Chat>, private val onClick: (Chat) -> 
     class ChatViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         val recipientName: TextView = itemView.findViewById(R.id.textViewRecipientName)
         val unreadBadge: TextView = itemView.findViewById(R.id.textViewUnreadBadge)
-        val textViewUnreadBadge: TextView = itemView.findViewById(R.id.textViewUnreadBadge)
     }
 }

@@ -5,7 +5,11 @@ import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.*
+import android.widget.Button
+import android.widget.EditText
+import android.widget.ImageView
+import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -26,11 +30,12 @@ data class Message(
 
 class ChatActivity : AppCompatActivity() {
 
+    // change here
     private val sharedSecret = "super_secret_key"
     private lateinit var recyclerView: RecyclerView
     private lateinit var editTextMessage: EditText
     private lateinit var buttonSend: Button
-    private lateinit var rootLayout: LinearLayout
+    private lateinit var rootLayout: ViewGroup
 
     private lateinit var dbRoot: DatabaseReference
     private var chatRoomDb: DatabaseReference? = null
@@ -42,6 +47,10 @@ class ChatActivity : AppCompatActivity() {
     private var recipientName: String? = null
     private var chatId: String = ""
     private var isChatWindowActive = false
+
+    companion object {
+        private const val FIREBASE_URL = "https://nyxx-a2e29-default-rtdb.europe-west1.firebasedatabase.app"
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -60,11 +69,8 @@ class ChatActivity : AppCompatActivity() {
         recyclerView.layoutManager = LinearLayoutManager(this)
         adapter = MessageAdapter(messageList, loginName)
         recyclerView.adapter = adapter
-        setupKeyboardHandling()
 
-        dbRoot = FirebaseDatabase.getInstance(
-            "https://nyxx-a2e29-default-rtdb.europe-west1.firebasedatabase.app"
-        ).reference
+        dbRoot = FirebaseDatabase.getInstance(FIREBASE_URL).reference
 
         if (loginName != null && recipientName != null) {
             startChatWith(recipientName!!)
@@ -89,6 +95,11 @@ class ChatActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
         isChatWindowActive = false
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        childEventListener?.let { chatRoomDb?.removeEventListener(it) }
     }
 
     private fun startChatWith(recipient: String) {
@@ -118,10 +129,11 @@ class ChatActivity : AppCompatActivity() {
             Toast.makeText(this, "Failed to create message ID.", Toast.LENGTH_SHORT).show()
             return
         }
+
         val message = Message(encryptedText, currentUser, timestamp, messageId, false, isEncrypted = true)
 
         messageRef.setValue(message).addOnSuccessListener {
-            val unreadRef = FirebaseDatabase.getInstance()
+            val unreadRef = FirebaseDatabase.getInstance(FIREBASE_URL)
                 .getReference("chat_rooms")
                 .child(chatId)
                 .child("unreadCount")
@@ -132,6 +144,7 @@ class ChatActivity : AppCompatActivity() {
                     currentData.value = currentValue + 1
                     return Transaction.success(currentData)
                 }
+
                 override fun onComplete(error: DatabaseError?, committed: Boolean, snapshot: DataSnapshot?) {
                     if (error != null) Log.e("UNREAD", error.message ?: "")
                 }
@@ -141,9 +154,7 @@ class ChatActivity : AppCompatActivity() {
 
     private fun listenForMessages() {
         Log.d("E2EE", "message listening starts...")
-        if (childEventListener != null) {
-            chatRoomDb?.removeEventListener(childEventListener!!)
-        }
+        childEventListener?.let { chatRoomDb?.removeEventListener(it) }
 
         childEventListener = object : ChildEventListener {
             override fun onChildAdded(snapshot: DataSnapshot, previousChildName: String?) {
@@ -159,15 +170,15 @@ class ChatActivity : AppCompatActivity() {
                 if (message != null) {
                     val isEncryptedSnapshot = snapshot.child("isEncrypted").getValue(Boolean::class.java)
                     Log.d("E2EE", "receive before decrypted: ${message.text}")
+
                     val finalText = try {
-                        if (isEncryptedSnapshot == null) {
-                            CryptoUtils.decrypt(message.text, sharedSecret)
-                        } else if (isEncryptedSnapshot) {
+                        if (isEncryptedSnapshot == null || isEncryptedSnapshot) {
                             CryptoUtils.decrypt(message.text, sharedSecret)
                         } else {
                             message.text
                         }
                     } catch (e: Exception) {
+                        Log.e("E2EE", "Decryption failed", e)
                         message.text
                     }
                     Log.d("E2EE", "receive after decrypted: $finalText")
@@ -202,7 +213,7 @@ class ChatActivity : AppCompatActivity() {
                                 }
                             })
                         }
-                        }
+                    }
                 }
             }
 
