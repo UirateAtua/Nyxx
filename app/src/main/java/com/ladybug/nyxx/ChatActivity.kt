@@ -94,14 +94,15 @@ class ChatActivity : AppCompatActivity() {
 
         val currentUser = loginName ?: return
         val timestamp = System.currentTimeMillis()
-        val messageId = chatRoomDb?.push()?.key
+        val messageRef = chatRoomDb?.push()
+        val messageId = messageRef?.key
 
         if (messageId.isNullOrEmpty()) {
             Toast.makeText(this, "Failed to create message ID.", Toast.LENGTH_SHORT).show()
             return
         }
         val message = Message(encryptedText, currentUser, timestamp, messageId, false, isEncrypted = true)
-        chatRoomDb?.push()?.setValue(message)
+        messageRef.setValue(message)
             ?.addOnFailureListener { e ->
                 Toast.makeText(this, "Failed to send: ${e.message}", Toast.LENGTH_SHORT).show()
             }
@@ -147,24 +148,24 @@ class ChatActivity : AppCompatActivity() {
                     recyclerView.scrollToPosition(messageList.size - 1)
 
                     if (message.user != loginName && !message.isSeen) {
-                        if (message.id.isNotEmpty()) {
-                            chatRoomDb?.child(message.id)?.child("seen")?.setValue(true)
-                        }
+                        snapshot.ref.child("seen").setValue(true)
                     }
                 }
             }
 
             override fun onChildChanged(snapshot: DataSnapshot, previousChildName: String?) {
-                val message = try {
+                val changedMessage = try {
                     snapshot.getValue(Message::class.java)
                 } catch (e: DatabaseException) {
                     return
                 }
 
-                if (message != null) {
-                    val index = messageList.indexOfFirst { it.id == message.id }
+                if (changedMessage != null) {
+                    val index = messageList.indexOfFirst { it.id == changedMessage.id }
                     if (index != -1) {
-                        messageList[index] = message
+                        val originalMessage = messageList[index]
+                        val updatedMessage = originalMessage.copy(isSeen = changedMessage.isSeen)
+                        messageList[index] = updatedMessage
                         adapter.notifyItemChanged(index)
                     }
                 }
@@ -192,17 +193,17 @@ class ChatActivity : AppCompatActivity() {
 class MessageAdapter(private val messages: List<Message>, private var currentUser: String?) :
     RecyclerView.Adapter<MessageAdapter.MessageViewHolder>() {
 
-    private val VIEW_TYPE_SENT = 1
-    private val VIEW_TYPE_RECEIVED = 2
+    private val viewTypeSent = 1
+    private val viewTypeReceived = 2
     private val timeFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
 
     override fun getItemViewType(position: Int): Int {
         val message = messages[position]
-        return if (message.user == currentUser) VIEW_TYPE_SENT else VIEW_TYPE_RECEIVED
+        return if (message.user == currentUser) viewTypeSent else viewTypeReceived
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): MessageViewHolder {
-        val layoutId = if (viewType == VIEW_TYPE_SENT) R.layout.item_message_sent else R.layout.item_message_received
+        val layoutId = if (viewType == viewTypeSent) R.layout.item_message_sent else R.layout.item_message_received
         val view = LayoutInflater.from(parent.context).inflate(layoutId, parent, false)
         return MessageViewHolder(view)
     }
@@ -212,7 +213,7 @@ class MessageAdapter(private val messages: List<Message>, private var currentUse
         holder.messageText.text = msg.text
         holder.timestampText.text = timeFormat.format(Date(msg.timestamp))
 
-        if (getItemViewType(position) == VIEW_TYPE_SENT) {
+        if (getItemViewType(position) == viewTypeSent) {
             if (msg.isSeen) {
                 holder.sentTick?.setImageResource(R.drawable.ic_tick_seen)
             } else {

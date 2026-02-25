@@ -35,11 +35,22 @@
         android:id="@+id/sent_tick"
         android:layout_width="12dp"
         android:layout_height="12dp"
+        android:src="@drawable/ic_tick"
+        app:layout_constraintBottom_toBottomOf="@+id/textViewTimestamp"
+        app:layout_constraintEnd_toStartOf="@+id/seen_tick"
+        app:layout_constraintTop_toTopOf="@+id/textViewTimestamp"
+        android:contentDescription="Sent" />
+
+    <ImageView
+        android:id="@+id/seen_tick"
+        android:layout_width="12dp"
+        android:layout_height="12dp"
         android:layout_marginEnd="8dp"
+        android:layout_marginStart="-4dp"
         android:src="@drawable/ic_tick"
         app:layout_constraintBottom_toBottomOf="@+id/textViewTimestamp"
         app:layout_constraintEnd_toEndOf="@+id/textViewMessage"
         app:layout_constraintTop_toTopOf="@+id/textViewTimestamp"
-        android:contentDescription="Sent" />
+        android:contentDescription="Seen" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>
