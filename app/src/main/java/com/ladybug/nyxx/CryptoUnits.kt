@@ -19,7 +19,7 @@ object CryptoUtils {
 
         val iv = cipher.iv
         val encryptedBytes = cipher.doFinal(
-            plainText.toByteArray(Charsets.UTF_8)   // 🔥 FIX HERE
+            plainText.toByteArray(Charsets.UTF_8)
         )
 
         val combined = iv + encryptedBytes
@@ -51,7 +51,6 @@ object CryptoUtils {
         val digest = MessageDigest.getInstance("SHA-256")
         val hash = digest.digest(secret.toByteArray())
 
-        // Use ONLY first 16 bytes → 128 bits
         val keyBytes = hash.copyOf(16)
 
         return SecretKeySpec(keyBytes, "AES")

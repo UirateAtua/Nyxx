@@ -24,7 +24,7 @@ import java.util.*
 import android.widget.Button
 
 
-data class Chat(val id: String = "", val lastMessage: String = "", val recipient: String = "")
+data class Chat(val id: String = "", val lastMessage: String = "", val recipient: String = "", var unreadCount: Int = 0)
 
 class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelectedListener {
 
@@ -237,12 +237,44 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         chatRoomsRef.addChildEventListener(object : ChildEventListener {
             override fun onChildAdded(snapshot: DataSnapshot, previousChildName: String?) {
                 val chatRoomId = snapshot.key ?: return
-                if (loginName != null && chatRoomId.split("_").contains(loginName!!.lowercase(Locale.ROOT))) {
-                    val recipient = chatRoomId.split("_").first { it != loginName!!.lowercase(Locale.ROOT) }
-                    val chat = Chat(chatRoomId, "", recipient.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.ROOT) else it.toString() })
-                    chatList.add(chat)
-                    adapter.notifyItemInserted(chatList.size - 1)
-                }
+                val currentUser = loginName?.lowercase(Locale.ROOT) ?: return
+
+                val parts = chatRoomId.split("_")
+                if (!parts.contains(currentUser)) return
+
+                val recipient = parts.first { it != currentUser }
+
+                val chat = Chat(
+                    id = chatRoomId,
+                    lastMessage = "",
+                    recipient = recipient.replaceFirstChar {
+                        if (it.isLowerCase()) it.titlecase(Locale.ROOT) else it.toString()
+                    },
+                    unreadCount = 0
+                )
+
+                chatList.add(chat)
+                adapter.notifyItemInserted(chatList.size - 1)
+
+                dbRoot.child("chat_rooms")
+                    .child(chatRoomId)
+                    .child("unreadCount")
+                    .child(currentUser)
+                    .addValueEventListener(object : ValueEventListener {
+
+                        override fun onDataChange(unreadSnapshot: DataSnapshot) {
+
+                            val count = unreadSnapshot.getValue(Int::class.java) ?: 0
+
+                            val index = chatList.indexOfFirst { it.id == chatRoomId }
+                            if (index != -1) {
+                                chatList[index].unreadCount = count
+                                adapter.notifyItemChanged(index)
+                            }
+                        }
+
+                        override fun onCancelled(error: DatabaseError) {}
+                    })
             }
             override fun onChildChanged(snapshot: DataSnapshot, previousChildName: String?) {}
             override fun onChildRemoved(snapshot: DataSnapshot) {}
@@ -262,6 +294,14 @@ class ChatAdapter(private val chats: List<Chat>, private val onClick: (Chat) -> 
     override fun onBindViewHolder(holder: ChatViewHolder, position: Int) {
         val chat = chats[position]
         holder.recipientName.text = chat.recipient
+
+        if (chat.unreadCount > 0) {
+            holder.unreadBadge.text = chat.unreadCount.toString()
+            holder.unreadBadge.visibility = View.VISIBLE
+        } else {
+            holder.unreadBadge.visibility = View.GONE
+        }
+
         holder.itemView.setOnClickListener { onClick(chat) }
     }
 
@@ -269,5 +309,7 @@ class ChatAdapter(private val chats: List<Chat>, private val onClick: (Chat) -> 
 
     class ChatViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         val recipientName: TextView = itemView.findViewById(R.id.textViewRecipientName)
+        val unreadBadge: TextView = itemView.findViewById(R.id.textViewUnreadBadge)
+        val textViewUnreadBadge: TextView = itemView.findViewById(R.id.textViewUnreadBadge)
     }
 }

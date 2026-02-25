@@ -11,7 +11,7 @@
     app:cardCornerRadius="12dp"
     app:cardElevation="2dp">
 
-    <LinearLayout
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
@@ -24,8 +24,20 @@
             android:textColor="@android:color/black"
             android:textSize="18sp"
             android:textStyle="bold"
+            android:layout_gravity="start|center_vertical"
             tools:text="Recipient Name" />
 
-    </LinearLayout>
+        <TextView
+            android:id="@+id/textViewUnreadBadge"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_gravity="end|top"
+            android:background="@drawable/red_circle"
+            android:textColor="@android:color/white"
+            android:gravity="center"
+            android:textSize="12sp"
+            android:visibility="gone"/>
+
+    </FrameLayout>
 
 </com.google.android.material.card.MaterialCardView>

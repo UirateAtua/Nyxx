@@ -40,6 +40,7 @@ class ChatActivity : AppCompatActivity() {
 
     private var loginName: String? = null
     private var recipientName: String? = null
+    private var chatId: String = ""
     private var isChatWindowActive = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -59,6 +60,7 @@ class ChatActivity : AppCompatActivity() {
         recyclerView.layoutManager = LinearLayoutManager(this)
         adapter = MessageAdapter(messageList, loginName)
         recyclerView.adapter = adapter
+        setupKeyboardHandling()
 
         dbRoot = FirebaseDatabase.getInstance(
             "https://nyxx-a2e29-default-rtdb.europe-west1.firebasedatabase.app"
@@ -81,6 +83,7 @@ class ChatActivity : AppCompatActivity() {
         super.onResume()
         isChatWindowActive = true
         markMessagesAsSeen()
+        resetUnreadCounter()
     }
 
     override fun onPause() {
@@ -90,7 +93,8 @@ class ChatActivity : AppCompatActivity() {
 
     private fun startChatWith(recipient: String) {
         val chatRoomId = getChatRoomId(loginName!!, recipient)
-        chatRoomDb = dbRoot.child("chat_rooms").child(chatRoomId)
+        chatId = chatRoomId
+        chatRoomDb = dbRoot.child("chat_rooms").child(chatId)
         chatRoomDb?.child("created")?.setValue(true)
         listenForMessages()
     }
@@ -105,6 +109,7 @@ class ChatActivity : AppCompatActivity() {
         Log.d("E2EE", "send after encrypted: $encryptedText")
 
         val currentUser = loginName ?: return
+        val receiver = recipientName ?: return
         val timestamp = System.currentTimeMillis()
         val messageRef = chatRoomDb?.push()
         val messageId = messageRef?.key
@@ -114,10 +119,24 @@ class ChatActivity : AppCompatActivity() {
             return
         }
         val message = Message(encryptedText, currentUser, timestamp, messageId, false, isEncrypted = true)
-        messageRef.setValue(message)
-            .addOnFailureListener { e ->
-                Toast.makeText(this, "Failed to send: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
+
+        messageRef.setValue(message).addOnSuccessListener {
+            val unreadRef = FirebaseDatabase.getInstance()
+                .getReference("chat_rooms")
+                .child(chatId)
+                .child("unreadCount")
+                .child(receiver)
+            unreadRef.runTransaction(object : Transaction.Handler {
+                override fun doTransaction(currentData: MutableData): Transaction.Result {
+                    val currentValue = currentData.getValue(Int::class.java) ?: 0
+                    currentData.value = currentValue + 1
+                    return Transaction.success(currentData)
+                }
+                override fun onComplete(error: DatabaseError?, committed: Boolean, snapshot: DataSnapshot?) {
+                    if (error != null) Log.e("UNREAD", error.message ?: "")
+                }
+            })
+        }
     }
 
     private fun listenForMessages() {
@@ -158,46 +177,62 @@ class ChatActivity : AppCompatActivity() {
                     adapter.notifyItemInserted(messageList.size - 1)
                     recyclerView.scrollToPosition(messageList.size - 1)
 
-                    if (isChatWindowActive && message.user != loginName && !message.seen) {
-                        snapshot.ref.child("seen").setValue(true)
-                    }
+                    if (message.user != loginName) {
+                        if (isChatWindowActive) {
+                            snapshot.ref.child("seen").setValue(true)
+                            dbRoot.child("chat_rooms")
+                                .child(chatId)
+                                .child("unreadCount")
+                                .child(loginName!!)
+                                .setValue(0)
+                        } else {
+                            val unreadRef = dbRoot.child("chat_rooms")
+                                .child(chatId)
+                                .child("unreadCount")
+                                .child(loginName!!)
+                            unreadRef.runTransaction(object : Transaction.Handler {
+                                override fun doTransaction(currentData: MutableData): Transaction.Result {
+                                    val currentValue = currentData.getValue(Int::class.java) ?: 0
+                                    currentData.value = currentValue + 1
+                                    return Transaction.success(currentData)
+                                }
+
+                                override fun onComplete(error: DatabaseError?, committed: Boolean, snapshot: DataSnapshot?) {
+                                    if (error != null) Log.e("UNREAD", "Failed to update unread count: ${error.message}")
+                                }
+                            })
+                        }
+                        }
                 }
             }
 
             override fun onChildChanged(snapshot: DataSnapshot, previousChildName: String?) {
-                val changedMessage = try {
-                    snapshot.getValue(Message::class.java)
-                } catch (e: DatabaseException) {
-                    return
-                }
-
-                if (changedMessage != null) {
-                    val index = messageList.indexOfFirst { it.id == changedMessage.id }
-                    if (index != -1) {
-                        val originalMessage = messageList[index]
-                        // Create a new Message object with updated seen property
-                        val updatedMessage = originalMessage.copy(seen = changedMessage.seen)
-                        messageList[index] = updatedMessage
-                        adapter.notifyItemChanged(index)
-                    }
+                val changedMessage = snapshot.getValue(Message::class.java) ?: return
+                val index = messageList.indexOfFirst { it.id == changedMessage.id }
+                if (index != -1) {
+                    messageList[index] = messageList[index].copy(seen = changedMessage.seen)
+                    adapter.notifyItemChanged(index)
                 }
             }
 
             override fun onChildRemoved(snapshot: DataSnapshot) {}
             override fun onChildMoved(snapshot: DataSnapshot, previousChildName: String?) {}
-            override fun onCancelled(error: DatabaseError) {
-                Toast.makeText(this@ChatActivity, "Failed to listen for messages.", Toast.LENGTH_SHORT).show()
-            }
+            override fun onCancelled(error: DatabaseError) {}
         }
-
         chatRoomDb?.addChildEventListener(childEventListener!!)
     }
-    
+
     private fun markMessagesAsSeen() {
         messageList.forEach { message ->
             if (message.user != loginName && !message.seen) {
                 chatRoomDb?.child(message.id)?.child("seen")?.setValue(true)
             }
+        }
+    }
+
+    private fun resetUnreadCounter() {
+        loginName?.let {
+            dbRoot.child("chat_rooms").child(chatId).child("unreadCount").child(it).setValue(0)
         }
     }
 
