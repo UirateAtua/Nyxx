@@ -7,19 +7,24 @@ import android.view.LayoutInflater
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.addCallback
 import androidx.appcompat.app.ActionBarDrawerToggle
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.widget.Toolbar
 import androidx.core.view.GravityCompat
 import androidx.drawerlayout.widget.DrawerLayout
+import androidx.recyclerview.widget.DividerItemDecoration
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.navigation.NavigationView
+import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
+import com.google.android.material.appbar.MaterialToolbar
 import com.google.firebase.database.*
 import java.security.MessageDigest
 import java.util.*
@@ -39,13 +44,15 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
     private val chatList = mutableListOf<Chat>()
     private var loginName: String? = null
 
-    private lateinit var username: EditText
-    private lateinit var password: EditText
-    private lateinit var buttonLogin: Button
-    private lateinit var buttonSignUp: Button
-    private lateinit var dbRoot: DatabaseReference
+    // Login Views
+    private lateinit var textInputLayoutUsername: TextInputLayout
+    private lateinit var textInputLayoutPassword: TextInputLayout
+    private lateinit var editTextUsername: TextInputEditText
+    private lateinit var editTextPassword: TextInputEditText
+    private lateinit var buttonLogin: MaterialButton
+    private lateinit var buttonSignUp: MaterialButton
 
-    // Store listeners to remove them later
+    private lateinit var dbRoot: DatabaseReference
     private val chatListeners = mutableListOf<ValueEventListener>()
     private var chatRoomListener: ChildEventListener? = null
 
@@ -74,17 +81,27 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
         if (savedName != null) {
             loginName = savedName
             setupChatListView()
-            Toast.makeText(this, "Welcome Back, $loginName", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.welcome_back, loginName), Toast.LENGTH_SHORT).show()
             listenForChats()
         } else {
             setContentView(R.layout.login)
             initLoginViews()
         }
+
+        onBackPressedDispatcher.addCallback(this) {
+            if (::drawerLayout.isInitialized && drawerLayout.isDrawerOpen(GravityCompat.START)) {
+                drawerLayout.closeDrawer(GravityCompat.START)
+            } else {
+                if (isEnabled) {
+                    isEnabled = false
+                    onBackPressedDispatcher.onBackPressed()
+                }
+            }
+        }
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        // Clean up listeners to prevent memory leaks
         chatRoomListener?.let { dbRoot.child("chat_rooms").removeEventListener(it) }
         chatListeners.forEach { dbRoot.removeEventListener(it) }
         chatListeners.clear()
@@ -92,15 +109,21 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
 
     private fun setupChatListView() {
         setContentView(R.layout.activity_main)
+        window.statusBarColor = getColor(R.color.colorPrimaryDark)
 
-        val toolbar: Toolbar = findViewById(R.id.toolbar)
+        val toolbar: MaterialToolbar = findViewById(R.id.toolbar)
         setSupportActionBar(toolbar)
+        supportActionBar?.title = getString(R.string.title_chats)
 
         drawerLayout = findViewById(R.id.drawer_layout)
         val navView: NavigationView = findViewById(R.id.nav_view)
 
         val toggle = ActionBarDrawerToggle(
-            this, drawerLayout, toolbar, 0, 0
+            this,
+            drawerLayout,
+            toolbar,
+            R.string.nav_new_chat,
+            R.string.nav_logout
         )
         toggle.drawerArrowDrawable.color = Color.WHITE
         drawerLayout.addDrawerListener(toggle)
@@ -113,6 +136,10 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
 
         recyclerView = findViewById(R.id.recyclerViewChats)
         recyclerView.layoutManager = LinearLayoutManager(this)
+        recyclerView.addItemDecoration(
+            DividerItemDecoration(this, DividerItemDecoration.VERTICAL)
+        )
+
         adapter = ChatAdapter(chatList) { chat ->
             val intent = Intent(this, ChatActivity::class.java)
             intent.putExtra("USER_NAME", loginName)
@@ -120,13 +147,17 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             startActivity(intent)
         }
         recyclerView.adapter = adapter
+
+        // FAB for New Chat
+        val fabNewChat: FloatingActionButton = findViewById(R.id.fabNewChat)
+        fabNewChat.setOnClickListener { showNewChatDialog() }
     }
 
     override fun onNavigationItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
             R.id.nav_new_chat -> showNewChatDialog()
-            R.id.nav_settings -> Toast.makeText(this, "Settings clicked", Toast.LENGTH_SHORT).show()
-            R.id.nav_about -> Toast.makeText(this, "About clicked", Toast.LENGTH_SHORT).show()
+            R.id.nav_settings -> Toast.makeText(this, R.string.nav_settings, Toast.LENGTH_SHORT).show()
+            R.id.nav_about -> Toast.makeText(this, R.string.nav_about, Toast.LENGTH_SHORT).show()
             R.id.nav_logout -> logout()
         }
         drawerLayout.closeDrawer(GravityCompat.START)
@@ -134,10 +165,13 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
     }
 
     private fun initLoginViews() {
-        username = findViewById(R.id.editTextText)
-        password = findViewById(R.id.editTextTextPassword)
-        buttonLogin = findViewById(R.id.button1)
-        buttonSignUp = findViewById(R.id.button4)
+        window.statusBarColor = getColor(R.color.colorPrimaryDark)
+        textInputLayoutUsername = findViewById(R.id.textInputLayoutUsername)
+        textInputLayoutPassword = findViewById(R.id.textInputLayoutPassword)
+        editTextUsername = findViewById(R.id.editTextUsername)
+        editTextPassword = findViewById(R.id.editTextPassword)
+        buttonLogin = findViewById(R.id.buttonLogin)
+        buttonSignUp = findViewById(R.id.buttonSignUp)
 
         buttonLogin.setOnClickListener { handleLogin() }
         buttonSignUp.setOnClickListener { handleSignUp() }
@@ -149,51 +183,61 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
     }
 
     private fun handleLogin() {
-        val name = username.text.toString().trim()
-        val pass = password.text.toString()
+        val name = editTextUsername.text.toString().trim()
+        val pass = editTextPassword.text.toString()
 
         if (name.isEmpty()) {
-            username.error = "Name required"
+            textInputLayoutUsername.error = getString(R.string.error_username_required)
             return
+        } else {
+            textInputLayoutUsername.error = null
         }
+
         if (pass.isEmpty()) {
-            password.error = "Password required"
+            textInputLayoutPassword.error = getString(R.string.error_password_required)
             return
+        } else {
+            textInputLayoutPassword.error = null
         }
 
         val userRef = dbRoot.child("users").child(name)
         userRef.get().addOnSuccessListener { snapshot ->
             if (!snapshot.exists()) {
-                Toast.makeText(this, "You have to sign up first!", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, R.string.error_user_not_found, Toast.LENGTH_SHORT).show()
                 return@addOnSuccessListener
             }
 
             val savedPasswordHash = snapshot.child("password").value.toString()
             if (savedPasswordHash == hashPassword(pass)) {
-                Toast.makeText(this, "Login successful!", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, R.string.success_login, Toast.LENGTH_SHORT).show()
                 loginName = name
                 saveLoginSession(name)
                 setupChatListView()
                 listenForChats()
             } else {
-                Toast.makeText(this, "Wrong password!!!", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, R.string.error_wrong_password, Toast.LENGTH_SHORT).show()
             }
         }.addOnFailureListener {
-            Toast.makeText(this, "Login failed", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, R.string.error_login_failed, Toast.LENGTH_SHORT).show()
         }
     }
 
     private fun handleSignUp() {
-        val name = username.text.toString().trim()
-        val pass = password.text.toString()
+        val name = editTextUsername.text.toString().trim()
+        val pass = editTextPassword.text.toString()
 
         if (name.isEmpty()) {
-            username.error = "Name required"
+            textInputLayoutUsername.error = getString(R.string.error_username_required)
             return
+        } else {
+            textInputLayoutUsername.error = null
         }
+
         if (pass.isEmpty()) {
-            password.error = "Password required"
+            textInputLayoutPassword.error = getString(R.string.error_password_required)
             return
+        } else {
+            textInputLayoutPassword.error = null
         }
 
         val userRef = dbRoot.child("users").child(name)
@@ -201,7 +245,7 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
             if (task.isSuccessful) {
                 val snapshot = task.result
                 if (snapshot.exists()) {
-                    Toast.makeText(this, "User already exists", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, R.string.error_user_exists, Toast.LENGTH_SHORT).show()
                 } else {
                     val userData = mapOf(
                         "password" to hashPassword(pass),
@@ -209,18 +253,26 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
                     )
                     userRef.setValue(userData)
                         .addOnSuccessListener {
-                            Toast.makeText(this, "User created! Signing in...", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(this, R.string.success_signup, Toast.LENGTH_SHORT).show()
                             loginName = name
                             saveLoginSession(name)
                             setupChatListView()
                             listenForChats()
                         }
                         .addOnFailureListener { e ->
-                            Toast.makeText(this, "Error creating user: ${e.message}", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(
+                                this,
+                                "${getString(R.string.error_signup_failed)}: ${e.message}",
+                                Toast.LENGTH_SHORT
+                            ).show()
                         }
                 }
             } else {
-                Toast.makeText(this, "Signup failed: ${task.exception?.message}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    this,
+                    "${getString(R.string.error_signup_failed)}: ${task.exception?.message}",
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         }
     }
@@ -240,11 +292,13 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
 
     private fun showNewChatDialog() {
         val builder = AlertDialog.Builder(this)
-        builder.setTitle("New Chat")
+        builder.setTitle(R.string.dialog_new_chat_title)
+
         val input = EditText(this)
-        input.hint = "Enter recipient's name"
+        input.hint = getString(R.string.dialog_hint_recipient)
         builder.setView(input)
-        builder.setPositiveButton("Create") { _, _ ->
+
+        builder.setPositiveButton(R.string.dialog_button_create) { _, _ ->
             val recipientName = input.text.toString().trim()
             if (recipientName.isNotEmpty()) {
                 val intent = Intent(this, ChatActivity::class.java)
@@ -252,10 +306,10 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
                 intent.putExtra("RECIPIENT_NAME", recipientName)
                 startActivity(intent)
             } else {
-                Toast.makeText(this, "Recipient name cannot be empty", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, R.string.error_recipient_empty, Toast.LENGTH_SHORT).show()
             }
         }
-        builder.setNegativeButton("Cancel", null)
+        builder.setNegativeButton(R.string.dialog_button_cancel, null)
         builder.show()
     }
 
@@ -286,7 +340,6 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
                 chatList.add(chat)
                 adapter.notifyItemInserted(chatList.size - 1)
 
-                // Listen for unread count changes
                 val unreadListener = dbRoot.child("chat_rooms")
                     .child(chatRoomId)
                     .child("unreadCount")
@@ -316,11 +369,15 @@ class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelecte
     }
 }
 
-class ChatAdapter(private val chats: List<Chat>, private val onClick: (Chat) -> Unit) :
-    RecyclerView.Adapter<ChatAdapter.ChatViewHolder>() {
+// Adapter Class
+class ChatAdapter(
+    private val chats: List<Chat>,
+    private val onClick: (Chat) -> Unit
+) : RecyclerView.Adapter<ChatAdapter.ChatViewHolder>() {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ChatViewHolder {
-        val view = LayoutInflater.from(parent.context).inflate(R.layout.item_chat, parent, false)
+        val view = LayoutInflater.from(parent.context)
+            .inflate(R.layout.item_chat, parent, false)
         return ChatViewHolder(view)
     }
 

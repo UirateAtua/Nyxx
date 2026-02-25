@@ -18,8 +18,8 @@ object CryptoUtils {
 
         val iv = cipher.iv
         val encryptedBytes = cipher.doFinal(plainText.toByteArray(Charsets.UTF_8))
-
         val combined = iv + encryptedBytes
+
         return Base64.encodeToString(combined, Base64.NO_WRAP)
     }
 

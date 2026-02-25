@@ -1,36 +1,41 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:padding="4dp">
+    android:paddingHorizontal="8dp"
+    android:paddingVertical="4dp">
 
+    <!-- Message Bubble -->
     <TextView
         android:id="@+id/textViewMessage"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:background="@drawable/bg_message_received"
-        android:paddingStart="12dp"
-        android:paddingTop="8dp"
-        android:paddingEnd="12dp"
-        android:paddingBottom="20dp"
-        android:textColor="@android:color/black"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="10dp"
+        android:textColor="@color/messageReceivedText"
+        android:textSize="15sp"
+        android:maxWidth="280dp"
+        tools:text="This is a received message"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
-        android:maxWidth="300dp"
-        tools:text="This is a received message that is long enough to wrap to the next line" />
+        app:layout_constraintHorizontal_bias="0.0" />
 
+    <!-- Timestamp (Positioned properly, no overlap) -->
     <TextView
         android:id="@+id/textViewTimestamp"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginStart="8dp"
-        android:layout_marginBottom="4dp"
-        android:textColor="#808080"
-        android:textSize="10sp"
-        app:layout_constraintBottom_toBottomOf="@+id/textViewMessage"
-        app:layout_constraintStart_toEndOf="@+id/textViewMessage"
-        tools:text="10:00 AM" />
+        android:layout_marginTop="4dp"
+        android:textColor="@color/textSecondary"
+        android:textSize="11sp"
+        tools:text="10:00 AM"
+        app:layout_constraintStart_toEndOf="@id/textViewMessage"
+        app:layout_constraintTop_toBottomOf="@id/textViewMessage"
+        app:layout_constraintBottom_toBottomOf="@id/textViewMessage" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

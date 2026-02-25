@@ -5,7 +5,6 @@ import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.TextView
@@ -15,6 +14,10 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.appbar.AppBarLayout
+import com.google.android.material.appbar.MaterialToolbar
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.card.MaterialCardView
 import com.google.firebase.database.*
 import java.text.SimpleDateFormat
 import java.util.*
@@ -30,12 +33,15 @@ data class Message(
 
 class ChatActivity : AppCompatActivity() {
 
-    // change here
     private val sharedSecret = "super_secret_key"
     private lateinit var recyclerView: RecyclerView
     private lateinit var editTextMessage: EditText
-    private lateinit var buttonSend: Button
+    private lateinit var buttonSend: MaterialButton
     private lateinit var rootLayout: ViewGroup
+    private lateinit var messageInputContainer: MaterialCardView
+    private lateinit var toolbar: MaterialToolbar
+    private lateinit var toolbarTitle: TextView
+    private lateinit var appBarLayout: AppBarLayout
 
     private lateinit var dbRoot: DatabaseReference
     private var chatRoomDb: DatabaseReference? = null
@@ -55,17 +61,25 @@ class ChatActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_chat)
+        window.statusBarColor = getColor(R.color.colorPrimaryDark)
+        toolbar = findViewById(R.id.toolbar)
+        setSupportActionBar(toolbar)
+        supportActionBar?.setDisplayShowTitleEnabled(false) // Disable default title
+        toolbar.setNavigationOnClickListener { onBackPressed() }
 
+        toolbarTitle = findViewById(R.id.toolbar_title)
         recyclerView = findViewById(R.id.recyclerViewMessages)
         editTextMessage = findViewById(R.id.editTextMessage)
         buttonSend = findViewById(R.id.buttonSend)
         rootLayout = findViewById(R.id.root_layout)
+        messageInputContainer = findViewById(R.id.messageInputContainer)
+        appBarLayout = findViewById(R.id.appBarLayout)
 
         loginName = intent.getStringExtra("USER_NAME")
         recipientName = intent.getStringExtra("RECIPIENT_NAME")
-        title = recipientName
+        toolbarTitle.text = recipientName
 
-        setupKeyboardHandling()
+        setupWindowInsets()
         recyclerView.layoutManager = LinearLayoutManager(this)
         adapter = MessageAdapter(messageList, loginName)
         recyclerView.adapter = adapter
@@ -81,6 +95,8 @@ class ChatActivity : AppCompatActivity() {
             if (inputText.isNotEmpty()) {
                 sendMessage(inputText)
                 editTextMessage.text.clear()
+            } else {
+                Toast.makeText(this, R.string.error_message_empty, Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -126,11 +142,18 @@ class ChatActivity : AppCompatActivity() {
         val messageId = messageRef?.key
 
         if (messageId.isNullOrEmpty()) {
-            Toast.makeText(this, "Failed to create message ID.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, R.string.error_failed_message_id, Toast.LENGTH_SHORT).show()
             return
         }
 
-        val message = Message(encryptedText, currentUser, timestamp, messageId, false, isEncrypted = true)
+        val message = Message(
+            encryptedText,
+            currentUser,
+            timestamp,
+            messageId,
+            false,
+            isEncrypted = true
+        )
 
         messageRef.setValue(message).addOnSuccessListener {
             val unreadRef = FirebaseDatabase.getInstance(FIREBASE_URL)
@@ -138,6 +161,7 @@ class ChatActivity : AppCompatActivity() {
                 .child(chatId)
                 .child("unreadCount")
                 .child(receiver)
+
             unreadRef.runTransaction(object : Transaction.Handler {
                 override fun doTransaction(currentData: MutableData): Transaction.Result {
                     val currentValue = currentData.getValue(Int::class.java) ?: 0
@@ -145,7 +169,11 @@ class ChatActivity : AppCompatActivity() {
                     return Transaction.success(currentData)
                 }
 
-                override fun onComplete(error: DatabaseError?, committed: Boolean, snapshot: DataSnapshot?) {
+                override fun onComplete(
+                    error: DatabaseError?,
+                    committed: Boolean,
+                    snapshot: DataSnapshot?
+                ) {
                     if (error != null) Log.e("UNREAD", error.message ?: "")
                 }
             })
@@ -168,7 +196,8 @@ class ChatActivity : AppCompatActivity() {
                 }
 
                 if (message != null) {
-                    val isEncryptedSnapshot = snapshot.child("isEncrypted").getValue(Boolean::class.java)
+                    val isEncryptedSnapshot = snapshot.child("isEncrypted")
+                        .getValue(Boolean::class.java)
                     Log.d("E2EE", "receive before decrypted: ${message.text}")
 
                     val finalText = try {
@@ -183,7 +212,10 @@ class ChatActivity : AppCompatActivity() {
                     }
                     Log.d("E2EE", "receive after decrypted: $finalText")
 
-                    val safeMessage = message.copy(text = finalText, isEncrypted = isEncryptedSnapshot ?: false)
+                    val safeMessage = message.copy(
+                        text = finalText,
+                        isEncrypted = isEncryptedSnapshot ?: false
+                    )
                     messageList.add(safeMessage)
                     adapter.notifyItemInserted(messageList.size - 1)
                     recyclerView.scrollToPosition(messageList.size - 1)
@@ -201,6 +233,7 @@ class ChatActivity : AppCompatActivity() {
                                 .child(chatId)
                                 .child("unreadCount")
                                 .child(loginName!!)
+
                             unreadRef.runTransaction(object : Transaction.Handler {
                                 override fun doTransaction(currentData: MutableData): Transaction.Result {
                                     val currentValue = currentData.getValue(Int::class.java) ?: 0
@@ -208,8 +241,17 @@ class ChatActivity : AppCompatActivity() {
                                     return Transaction.success(currentData)
                                 }
 
-                                override fun onComplete(error: DatabaseError?, committed: Boolean, snapshot: DataSnapshot?) {
-                                    if (error != null) Log.e("UNREAD", "Failed to update unread count: ${error.message}")
+                                override fun onComplete(
+                                    error: DatabaseError?,
+                                    committed: Boolean,
+                                    snapshot: DataSnapshot?
+                                ) {
+                                    if (error != null) {
+                                        Log.e(
+                                            "UNREAD",
+                                            "Failed to update unread count: ${error.message}"
+                                        )
+                                    }
                                 }
                             })
                         }
@@ -243,21 +285,34 @@ class ChatActivity : AppCompatActivity() {
 
     private fun resetUnreadCounter() {
         loginName?.let {
-            dbRoot.child("chat_rooms").child(chatId).child("unreadCount").child(it).setValue(0)
+            dbRoot.child("chat_rooms")
+                .child(chatId)
+                .child("unreadCount")
+                .child(it)
+                .setValue(0)
         }
     }
 
-    private fun setupKeyboardHandling() {
+    private fun setupWindowInsets() {
         ViewCompat.setOnApplyWindowInsetsListener(rootLayout) { view, insets ->
-            val imeInsets = insets.getInsets(WindowInsetsCompat.Type.ime())
-            view.setPadding(view.paddingLeft, view.paddingTop, view.paddingRight, imeInsets.bottom)
+            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+
+            view.setPadding(
+                systemBars.left,
+                systemBars.top,
+                systemBars.right,
+                0
+            )
             insets
         }
     }
 }
 
-class MessageAdapter(private val messages: List<Message>, private var currentUser: String?) :
-    RecyclerView.Adapter<MessageAdapter.MessageViewHolder>() {
+// Adapter Class
+class MessageAdapter(
+    private val messages: List<Message>,
+    private var currentUser: String?
+) : RecyclerView.Adapter<MessageAdapter.MessageViewHolder>() {
 
     private val viewTypeSent = 1
     private val viewTypeReceived = 2
@@ -269,7 +324,11 @@ class MessageAdapter(private val messages: List<Message>, private var currentUse
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): MessageViewHolder {
-        val layoutId = if (viewType == viewTypeSent) R.layout.item_message_sent else R.layout.item_message_received
+        val layoutId = if (viewType == viewTypeSent) {
+            R.layout.item_message_sent
+        } else {
+            R.layout.item_message_received
+        }
         val view = LayoutInflater.from(parent.context).inflate(layoutId, parent, false)
         return MessageViewHolder(view)
     }
@@ -281,9 +340,11 @@ class MessageAdapter(private val messages: List<Message>, private var currentUse
 
         if (getItemViewType(position) == viewTypeSent) {
             if (msg.seen) {
-                holder.sentTick?.setImageResource(R.drawable.ic_tick_seen)
+                holder.seenTick?.visibility = View.VISIBLE
+                holder.sentTick?.visibility = View.GONE
             } else {
-                holder.sentTick?.setImageResource(R.drawable.ic_tick_sent)
+                holder.seenTick?.visibility = View.GONE
+                holder.sentTick?.visibility = View.VISIBLE
             }
         }
     }
@@ -293,6 +354,7 @@ class MessageAdapter(private val messages: List<Message>, private var currentUse
     class MessageViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         val messageText: TextView = itemView.findViewById(R.id.textViewMessage)
         val timestampText: TextView = itemView.findViewById(R.id.textViewTimestamp)
-        val sentTick: ImageView? = itemView.findViewById(R.id.sent_tick)
+        val sentTick: ImageView? = itemView.findViewById(R.id.imageViewSentTick)
+        val seenTick: ImageView? = itemView.findViewById(R.id.imageViewSeenTick)
     }
 }
