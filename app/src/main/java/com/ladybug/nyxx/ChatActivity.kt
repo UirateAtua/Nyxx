@@ -101,6 +101,7 @@ class ChatActivity : AppCompatActivity() {
     }
 
     private fun listenForMessages() {
+        Log.d("E2EE", "message listening starts...")
         if (childEventListener != null) {
             chatRoomDb?.removeEventListener(childEventListener!!)
         }
@@ -108,6 +109,7 @@ class ChatActivity : AppCompatActivity() {
         childEventListener = object : ChildEventListener {
             override fun onChildAdded(snapshot: DataSnapshot, previousChildName: String?) {
                 if (snapshot.key == "created") return
+                if (!snapshot.hasChild("text")) return
 
                 val message = snapshot.getValue(Message::class.java)
                 if (message != null) {
