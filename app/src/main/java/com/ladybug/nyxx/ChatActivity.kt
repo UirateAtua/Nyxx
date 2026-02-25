@@ -40,6 +40,7 @@ class ChatActivity : AppCompatActivity() {
 
     private var loginName: String? = null
     private var recipientName: String? = null
+    private var isChatWindowActive = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -76,6 +77,17 @@ class ChatActivity : AppCompatActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        isChatWindowActive = true
+        markMessagesAsSeen()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        isChatWindowActive = false
+    }
+
     private fun startChatWith(recipient: String) {
         val chatRoomId = getChatRoomId(loginName!!, recipient)
         chatRoomDb = dbRoot.child("chat_rooms").child(chatRoomId)
@@ -103,7 +115,7 @@ class ChatActivity : AppCompatActivity() {
         }
         val message = Message(encryptedText, currentUser, timestamp, messageId, false, isEncrypted = true)
         messageRef.setValue(message)
-            ?.addOnFailureListener { e ->
+            .addOnFailureListener { e ->
                 Toast.makeText(this, "Failed to send: ${e.message}", Toast.LENGTH_SHORT).show()
             }
     }
@@ -141,14 +153,13 @@ class ChatActivity : AppCompatActivity() {
                     }
                     Log.d("E2EE", "receive after decrypted: $finalText")
 
-
                     val safeMessage = message.copy(text = finalText, isEncrypted = isEncryptedSnapshot ?: false)
                     messageList.add(safeMessage)
                     adapter.notifyItemInserted(messageList.size - 1)
                     recyclerView.scrollToPosition(messageList.size - 1)
 
-                    if (message.user != loginName && !message.isSeen) {
-                        snapshot.ref.child("seen").setValue(true)
+                    if (isChatWindowActive && message.user != loginName && !message.isSeen) {
+                        snapshot.ref.child("isSeen").setValue(true)
                     }
                 }
             }
@@ -164,6 +175,7 @@ class ChatActivity : AppCompatActivity() {
                     val index = messageList.indexOfFirst { it.id == changedMessage.id }
                     if (index != -1) {
                         val originalMessage = messageList[index]
+                        // Create a new Message object with updated isSeen property
                         val updatedMessage = originalMessage.copy(isSeen = changedMessage.isSeen)
                         messageList[index] = updatedMessage
                         adapter.notifyItemChanged(index)
@@ -179,6 +191,14 @@ class ChatActivity : AppCompatActivity() {
         }
 
         chatRoomDb?.addChildEventListener(childEventListener!!)
+    }
+    
+    private fun markMessagesAsSeen() {
+        messageList.forEach { message ->
+            if (message.user != loginName && !message.isSeen) {
+                chatRoomDb?.child(message.id)?.child("isSeen")?.setValue(true)
+            }
+        }
     }
 
     private fun setupKeyboardHandling() {
@@ -227,6 +247,6 @@ class MessageAdapter(private val messages: List<Message>, private var currentUse
     class MessageViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         val messageText: TextView = itemView.findViewById(R.id.textViewMessage)
         val timestampText: TextView = itemView.findViewById(R.id.textViewTimestamp)
-        val sentTick: ImageView? = itemView.findViewById(R.id.sent_tick) // Nullable for received messages
+        val sentTick: ImageView? = itemView.findViewById(R.id.sent_tick)
     }
 }
