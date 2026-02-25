@@ -3,7 +3,6 @@ package com.ladybug.nyxx
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
-import android.util.Log
 import android.view.LayoutInflater
 import android.view.MenuItem
 import android.view.View
@@ -23,7 +22,50 @@ import com.google.android.material.navigation.NavigationView
 import com.google.firebase.database.*
 import java.util.*
 import android.widget.Button
+import android.util.Base64
+import javax.crypto.Cipher
+import javax.crypto.spec.SecretKeySpec
+import javax.crypto.SecretKey
+import javax.crypto.spec.GCMParameterSpec
 
+object CryptoUtils {
+
+    private const val TRANSFORMATION = "AES/GCM/NoPadding"
+    private const val ALGORITHM = "AES"
+
+    private fun generateKey(secret: String): SecretKey {
+        val keyBytes = secret.padEnd(16, '0').substring(0, 16).toByteArray()
+        return SecretKeySpec(keyBytes, ALGORITHM)
+    }
+
+    fun encrypt(text: String, secret: String): String {
+        val cipher = Cipher.getInstance(TRANSFORMATION)
+        val key = generateKey(secret)
+
+        cipher.init(Cipher.ENCRYPT_MODE, key)
+
+        val iv = cipher.iv
+        val encryptedBytes = cipher.doFinal(text.toByteArray())
+
+        val combined = iv + encryptedBytes
+        return Base64.encodeToString(combined, Base64.NO_WRAP)
+    }
+
+    fun decrypt(encryptedText: String, secret: String): String {
+        val decoded = Base64.decode(encryptedText, Base64.NO_WRAP)
+
+        val iv = decoded.copyOfRange(0, 12)
+        val encryptedBytes = decoded.copyOfRange(12, decoded.size)
+
+        val cipher = Cipher.getInstance(TRANSFORMATION)
+        val key = generateKey(secret)
+
+        cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, iv))
+
+        val decryptedBytes = cipher.doFinal(encryptedBytes)
+        return String(decryptedBytes)
+    }
+}
 data class Chat(val id: String = "", val lastMessage: String = "", val recipient: String = "")
 
 class MainActivity : AppCompatActivity(), NavigationView.OnNavigationItemSelectedListener {
