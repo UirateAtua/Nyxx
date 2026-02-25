@@ -20,7 +20,7 @@ data class Message(
     val user: String = "",
     val timestamp: Long = 0,
     val id: String = "",
-    var isSeen: Boolean = false,
+    var seen: Boolean = false,
     val isEncrypted: Boolean = false
 )
 
@@ -158,8 +158,8 @@ class ChatActivity : AppCompatActivity() {
                     adapter.notifyItemInserted(messageList.size - 1)
                     recyclerView.scrollToPosition(messageList.size - 1)
 
-                    if (isChatWindowActive && message.user != loginName && !message.isSeen) {
-                        snapshot.ref.child("isSeen").setValue(true)
+                    if (isChatWindowActive && message.user != loginName && !message.seen) {
+                        snapshot.ref.child("seen").setValue(true)
                     }
                 }
             }
@@ -175,8 +175,8 @@ class ChatActivity : AppCompatActivity() {
                     val index = messageList.indexOfFirst { it.id == changedMessage.id }
                     if (index != -1) {
                         val originalMessage = messageList[index]
-                        // Create a new Message object with updated isSeen property
-                        val updatedMessage = originalMessage.copy(isSeen = changedMessage.isSeen)
+                        // Create a new Message object with updated seen property
+                        val updatedMessage = originalMessage.copy(seen = changedMessage.seen)
                         messageList[index] = updatedMessage
                         adapter.notifyItemChanged(index)
                     }
@@ -195,8 +195,8 @@ class ChatActivity : AppCompatActivity() {
     
     private fun markMessagesAsSeen() {
         messageList.forEach { message ->
-            if (message.user != loginName && !message.isSeen) {
-                chatRoomDb?.child(message.id)?.child("isSeen")?.setValue(true)
+            if (message.user != loginName && !message.seen) {
+                chatRoomDb?.child(message.id)?.child("seen")?.setValue(true)
             }
         }
     }
@@ -234,7 +234,7 @@ class MessageAdapter(private val messages: List<Message>, private var currentUse
         holder.timestampText.text = timeFormat.format(Date(msg.timestamp))
 
         if (getItemViewType(position) == viewTypeSent) {
-            if (msg.isSeen) {
+            if (msg.seen) {
                 holder.sentTick?.setImageResource(R.drawable.ic_tick_seen)
             } else {
                 holder.sentTick?.setImageResource(R.drawable.ic_tick_sent)
